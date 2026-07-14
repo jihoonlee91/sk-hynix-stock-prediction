@@ -7,41 +7,54 @@ from backtest import backtest, rolling_backtest
 from fetch_news import fetch_news
 from fetch_price import fetch_price_history
 from forecast import forecast_prices
+from related_stocks import compute_correlations, fetch_related_prices
 from report import generate_report
 from sentiment import score_texts
 
 
 def main():
-    print("[1/6] 주가 데이터 수집 중...")
+    print("[1/7] 주가 데이터 수집 중...")
     price_df = fetch_price_history()
     print(f"  -> {len(price_df)}일치 데이터 확보 (최근 종가: {price_df['Close'].iloc[-1]:,.0f}원)")
 
-    print("[2/6] 뉴스 수집 및 감성분석 중...")
+    print("[2/7] 관련 종목(삼성전자/Micron/SanDisk) 상관관계 분석 중...")
+    related_prices = fetch_related_prices()
+    correlations = compute_correlations(price_df, related_prices)
+    print(f"  -> {', '.join(f'{k}:{v:+.2f}' for k, v in correlations.items())}")
+
+    print("[3/7] 뉴스 수집 및 감성분석 중...")
     news = fetch_news()
     sentiment_scores = score_texts([item["title"] for item in news])
     avg_sentiment = sum(sentiment_scores) / len(sentiment_scores) if sentiment_scores else 0.0
     print(f"  -> 뉴스 {len(news)}건, 평균 감성 점수 {avg_sentiment:+.2f}")
 
-    print("[3/6] Chronos로 주가 예측 중...")
+    print("[4/7] Chronos로 주가 예측 중...")
     all_prices = price_df["Close"].tolist()
     recent_prices = all_prices[-90:]
     forecast = forecast_prices(recent_prices, sentiment_score=avg_sentiment)
     print(f"  -> 다음 거래일 예측 중앙값: {forecast['median'][0]:,.0f}원")
 
-    print("[4/6] 백테스트(최근 구간)로 예측 정확도 검증 중...")
+    print("[5/7] 백테스트(최근 구간)로 예측 정확도 검증 중...")
     backtest_result = backtest(all_prices)
     print(f"  -> 최근 {len(backtest_result['actual'])}거래일 기준 MAPE {backtest_result['mape']:.2f}%")
 
-    print("[5/6] 롤링 백테스트(여러 과거 시점)로 성능 검증 중...")
+    print("[6/7] 롤링 백테스트(여러 과거 시점)로 성능 검증 중...")
     rolling_result = rolling_backtest(all_prices)
     print(
         f"  -> {rolling_result['num_windows']}개 구간 평균 MAPE "
         f"{rolling_result['mape_mean']:.2f}% (표준편차 {rolling_result['mape_std']:.2f}%p)"
     )
 
-    print("[6/6] 정적 리포트 생성 중...")
+    print("[7/7] 정적 리포트 생성 중...")
     report_path = generate_report(
-        price_df, news, sentiment_scores, forecast, backtest_result, rolling_result
+        price_df,
+        news,
+        sentiment_scores,
+        forecast,
+        backtest_result,
+        rolling_result,
+        related_prices,
+        correlations,
     )
     print(f"  -> 생성 완료: {report_path}")
 

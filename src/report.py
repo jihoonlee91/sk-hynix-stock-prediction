@@ -96,6 +96,43 @@ def _plot_rolling_chart(rolling_result, out_path):
     plt.close()
 
 
+def _plot_correlation_chart(price_df, related_prices, out_path):
+    history = price_df.tail(180).copy()
+    history["Date"] = pd.to_datetime(history["Date"])
+    base = history["Close"].iloc[0]
+    normalized = history["Close"] / base * 100
+
+    plt.figure(figsize=(10, 4.5))
+    plt.plot(history["Date"], normalized, label="SK하이닉스", linewidth=2, color="#1f77b4")
+
+    colors = ["#ff7f0e", "#2ca02c", "#9467bd"]
+    for (name, df), color in zip(related_prices.items(), colors):
+        df = df.copy()
+        df["Date"] = pd.to_datetime(df["Date"])
+        df = df[df["Date"] >= history["Date"].iloc[0]]
+        if df.empty:
+            continue
+        df_base = df["Close"].iloc[0]
+        plt.plot(df["Date"], df["Close"] / df_base * 100, label=name, color=color, alpha=0.8)
+
+    plt.title("SK하이닉스 vs 관련 종목 (최근 180일, 시작일=100 기준 정규화)")
+    plt.xlabel("날짜")
+    plt.ylabel("정규화 지수 (시작일=100)")
+    plt.legend()
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=120)
+    plt.close()
+
+
+def _correlation_rows_html(correlations):
+    rows = []
+    for name, corr in correlations.items():
+        strength = "강함" if abs(corr) > 0.6 else "보통" if abs(corr) > 0.3 else "약함"
+        rows.append(f"<tr><td>{name}</td><td>{corr:+.2f}</td><td>{strength}</td></tr>")
+    return "\n".join(rows)
+
+
 def _outlook_text(forecast, last_close, avg_sentiment):
     horizon = len(forecast["median"])
     final_median = forecast["median"][-1]
@@ -114,7 +151,16 @@ def _outlook_text(forecast, last_close, avg_sentiment):
     )
 
 
-def generate_report(price_df, news, sentiment_scores, forecast, backtest_result, rolling_result):
+def generate_report(
+    price_df,
+    news,
+    sentiment_scores,
+    forecast,
+    backtest_result,
+    rolling_result,
+    related_prices,
+    correlations,
+):
     os.makedirs(ASSETS_DIR, exist_ok=True)
 
     last_date = price_df["Date"].iloc[-1]
@@ -126,6 +172,9 @@ def generate_report(price_df, news, sentiment_scores, forecast, backtest_result,
 
     rolling_chart_path = os.path.join(ASSETS_DIR, "rolling_backtest.png")
     _plot_rolling_chart(rolling_result, rolling_chart_path)
+
+    correlation_chart_path = os.path.join(ASSETS_DIR, "correlation.png")
+    _plot_correlation_chart(price_df, related_prices, correlation_chart_path)
 
     avg_sentiment = forecast["sentiment_score"]
     mood = "긍정적" if avg_sentiment > 0.2 else "부정적" if avg_sentiment < -0.2 else "중립적"
@@ -161,8 +210,9 @@ def generate_report(price_df, news, sentiment_scores, forecast, backtest_result,
 <h2>예측 기법 설명</h2>
 <ol>
   <li><b>가격 데이터 수집</b> — Yahoo Finance에서 SK하이닉스(000660.KS) 최근 약 2년치 일별 종가를 가져옵니다.</li>
-  <li><b>뉴스 감성분석</b> — Google News RSS로 "SK하이닉스", "반도체 지정학" 관련 최신 기사 제목을 모아, 사전학습된 한국어 감성분류 모델로 각 제목을 긍정/부정 점수(-1~1)로 변환하고 평균을 냅니다.</li>
-  <li><b>가격 예측</b> — 최근 90거래일 종가만을 입력으로, 별도 학습 과정 없이 <b>Amazon Chronos</b>(사전학습된 시계열 파운데이션 모델)가 향후 {len(forecast['median'])}거래일의 가격 분포를 zero-shot으로 예측합니다.</li>
+  <li><b>뉴스 감성분석</b> — Google News RSS로 "SK하이닉스", "SK하이닉스 목표주가"(증권가 리포트/애널리스트 의견), "반도체 지정학", "반도체 업황"(산업 전반 경제 뉴스) 4개 검색어의 최신 기사 제목을 모아, 사전학습된 한국어 감성분류 모델로 각 제목을 긍정/부정 점수(-1~1)로 변환하고 평균을 냅니다.</li>
+  <li><b>가격 예측</b> — 최근 90거래일 종가만을 입력으로, 별도 학습 과정 없이 <b>Amazon Chronos-Bolt</b>(사전학습된 최신 시계열 파운데이션 모델)가 향후 {len(forecast['median'])}거래일의 가격 분포를 zero-shot으로 예측합니다.</li>
+  <li><b>관련 종목 비교</b> — 메모리 반도체 업황을 함께 움직이는 삼성전자/Micron/SanDisk와의 일별 수익률 상관관계를 참고 지표로 함께 제공합니다.</li>
   <li><b>감성 보정</b> — Chronos는 가격 외 정보를 직접 입력받지 않으므로, 뉴스 평균 감성 점수를 예측 중앙값에 곱셈 형태의 단순 보정(최대 ±1%)으로만 반영합니다. 학습된 결합 모델이 아니라 휴리스틱임을 명시합니다.</li>
   <li><b>성능 검증</b> — 아래 "성능 분석"에서 설명하듯, <b>미래 시점의 실제 값은 예측 시점에 전혀 사용하지 않고</b>(look-ahead 없이) 과거 여러 시점을 기준으로 같은 방식을 반복 적용해 정확도를 측정합니다.</li>
 </ol>
@@ -183,6 +233,14 @@ def generate_report(price_df, news, sentiment_scores, forecast, backtest_result,
 {_news_rows_html(news, sentiment_scores)}
 </table>
 
+<h2>관련 종목 비교</h2>
+<p>메모리 반도체 업황을 함께 좌우하는 종목들과의 최근 180일 추세 비교 및 일별 수익률 상관계수입니다.</p>
+<img src="assets/correlation.png" alt="관련 종목 비교 차트">
+<table>
+<tr><th>종목</th><th>상관계수</th><th>강도</th></tr>
+{_correlation_rows_html(correlations)}
+</table>
+
 <h2>성능 분석</h2>
 <h3>최근 구간 백테스트</h3>
 <p>가장 최근 {len(backtest_result['actual'])}거래일을 정답으로 숨기고, <b>그 이전 데이터까지의 정보만으로</b> 같은 방식으로 예측해본 결과입니다.</p>
@@ -199,10 +257,10 @@ def generate_report(price_df, news, sentiment_scores, forecast, backtest_result,
 
 <h2>구성 요소</h2>
 <ul>
-  <li>주가 데이터: Yahoo Finance (yfinance)</li>
-  <li>뉴스: Google News RSS ("SK하이닉스", "반도체 지정학" 검색)</li>
+  <li>주가 데이터: Yahoo Finance (yfinance) — SK하이닉스, 삼성전자, Micron, SanDisk</li>
+  <li>뉴스: Google News RSS ("SK하이닉스", "SK하이닉스 목표주가", "반도체 지정학", "반도체 업황" 검색)</li>
   <li>감성분석: <code>monologg/koelectra-small-finetuned-nsmc</code> (사전학습, 공개 모델)</li>
-  <li>가격 예측: <code>amazon/chronos-t5-small</code> (Amazon Chronos, 사전학습 시계열 파운데이션 모델, zero-shot)</li>
+  <li>가격 예측: <code>amazon/chronos-bolt-small</code> (Amazon Chronos-Bolt, 사전학습 시계열 파운데이션 모델, zero-shot)</li>
 </ul>
 
 </body>
