@@ -6,3 +6,5 @@ torch
 transformers
 sentencepiece
 chronos-forecasting
+statsmodels
+scikit-learn

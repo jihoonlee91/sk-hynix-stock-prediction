@@ -1,60 +1,57 @@
+import json
 import os
+import subprocess
+import sys
+import tempfile
 
-os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
-os.environ.setdefault("OMP_NUM_THREADS", "1")
+import pandas as pd
 
-from backtest import backtest, rolling_backtest
-from fetch_news import fetch_news
-from fetch_price import fetch_price_history
-from forecast import forecast_prices
-from related_stocks import compute_correlations, fetch_related_prices
 from report import generate_report
-from sentiment import score_texts
+
+SRC_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+def _run_stage(script_name, *args):
+    script_path = os.path.join(SRC_DIR, script_name)
+    subprocess.run([sys.executable, script_path, *args], check=True)
 
 
 def main():
-    print("[1/7] 주가 데이터 수집 중...")
-    price_df = fetch_price_history()
-    print(f"  -> {len(price_df)}일치 데이터 확보 (최근 종가: {price_df['Close'].iloc[-1]:,.0f}원)")
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        collect_path = os.path.join(tmp_dir, "collected.json")
+        forecast_path = os.path.join(tmp_dir, "forecast.json")
 
-    print("[2/7] 관련 종목(삼성전자/Micron/SanDisk) 상관관계 분석 중...")
-    related_prices = fetch_related_prices()
-    correlations = compute_correlations(price_df, related_prices)
-    print(f"  -> {', '.join(f'{k}:{v:+.2f}' for k, v in correlations.items())}")
+        # 1단계(데이터 수집·감성분석)와 2단계(Chronos 가격 예측)를 완전히 분리된
+        # 프로세스로 실행한다. 감성분류기가 로드된 프로세스가 살아있는 채로 같은
+        # 프로세스에서 이어 Chronos-Bolt-base까지 로드하면 이 환경에서 간헐적으로
+        # 크래시가 발생해, 1단계 프로세스가 완전히 끝나 메모리를 반환한 뒤 2단계를
+        # 새 프로세스로 띄운다 (각 스크립트 상단 설명 참고).
+        print("=== 1단계: 데이터 수집 · 감성분석 (별도 프로세스) ===")
+        _run_stage("stage_collect.py", collect_path)
 
-    print("[3/7] 뉴스 수집 및 감성분석 중...")
-    news = fetch_news()
-    sentiment_scores = score_texts([item["title"] for item in news])
-    avg_sentiment = sum(sentiment_scores) / len(sentiment_scores) if sentiment_scores else 0.0
-    print(f"  -> 뉴스 {len(news)}건, 평균 감성 점수 {avg_sentiment:+.2f}")
+        print("\n=== 2단계: 가격 예측 · 백테스트 (별도 프로세스) ===")
+        _run_stage("stage_forecast.py", collect_path, forecast_path)
 
-    print("[4/7] Chronos로 주가 예측 중...")
-    all_prices = price_df["Close"].tolist()
-    recent_prices = all_prices[-90:]
-    forecast = forecast_prices(recent_prices, sentiment_score=avg_sentiment)
-    print(f"  -> 다음 거래일 예측 중앙값: {forecast['median'][0]:,.0f}원")
+        with open(collect_path, encoding="utf-8") as f:
+            collected = json.load(f)
+        with open(forecast_path, encoding="utf-8") as f:
+            forecasted = json.load(f)
 
-    print("[5/7] 백테스트(최근 구간)로 예측 정확도 검증 중...")
-    backtest_result = backtest(all_prices)
-    print(f"  -> 최근 {len(backtest_result['actual'])}거래일 기준 MAPE {backtest_result['mape']:.2f}%")
+    price_df = pd.DataFrame(collected["price_df"])
+    related_prices = {name: pd.DataFrame(rows) for name, rows in collected["related_prices"].items()}
 
-    print("[6/7] 롤링 백테스트(여러 과거 시점)로 성능 검증 중...")
-    rolling_result = rolling_backtest(all_prices)
-    print(
-        f"  -> {rolling_result['num_windows']}개 구간 평균 MAPE "
-        f"{rolling_result['mape_mean']:.2f}% (표준편차 {rolling_result['mape_std']:.2f}%p)"
-    )
-
-    print("[7/7] 정적 리포트 생성 중...")
+    print("\n=== 3단계: 리포트 생성 ===")
     report_path = generate_report(
         price_df,
-        news,
-        sentiment_scores,
-        forecast,
-        backtest_result,
-        rolling_result,
+        collected["news"],
+        collected["sentiment_scores"],
+        forecasted["forecast"],
+        forecasted["backtest_result"],
+        forecasted["rolling_result"],
         related_prices,
-        correlations,
+        collected["correlations"],
+        collected["move_diagnosis"],
+        collected["index_scan_result"],
     )
     print(f"  -> 생성 완료: {report_path}")
 
