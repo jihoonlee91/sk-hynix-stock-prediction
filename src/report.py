@@ -69,12 +69,28 @@ def _plot_chart(price_df, forecast, forecast_dates, out_path):
 
 def _news_rows_html(news, sentiment_scores, top_n=25):
     """뉴스가 많아지면(다국어+검색어 확장으로 수백 건) 표를 다 채우기보다,
-    감성 융합에 실제로 영향을 크게 준 상위 기사만 추려서 보여준다."""
+    감성 융합에 실제로 영향을 크게 준 상위 기사만 추려서 보여준다.
+
+    언어별로 따로 상위 기사를 뽑은 뒤 합친다 — 한국어(KR-FinBert-SC)와 영어(FinBERT)
+    분류기의 확신도 캘리브레이션이 서로 달라(한국어 쪽이 점수가 더 극단적으로 나오는
+    경향), 언어 구분 없이 |점수|로만 정렬하면 실제 수집량과 무관하게 한쪽 언어가
+    표를 지배해 버린다(예: 수집은 영어가 더 많은데 표시는 국내 기사가 대부분).
+    """
     scored = list(zip(news, sentiment_scores))
-    scored.sort(key=lambda pair: abs(pair[1]) * pair[0].get("query_weight", 1.0), reverse=True)
+
+    langs = sorted({item.get("lang", "ko") for item, _ in scored})
+    per_lang_quota = max(1, top_n // len(langs)) if langs else top_n
+
+    selected = []
+    for lang in langs:
+        lang_scored = [pair for pair in scored if pair[0].get("lang", "ko") == lang]
+        lang_scored.sort(key=lambda pair: abs(pair[1]) * pair[0].get("query_weight", 1.0), reverse=True)
+        selected.extend(lang_scored[:per_lang_quota])
+
+    selected.sort(key=lambda pair: abs(pair[1]) * pair[0].get("query_weight", 1.0), reverse=True)
 
     rows = []
-    for item, score in scored[:top_n]:
+    for item, score in selected[:top_n]:
         mood = "긍정" if score > 0.2 else "부정" if score < -0.2 else "중립"
         lang_label = "국내" if item.get("lang") == "ko" else "해외"
         dup = item.get("duplicate_count", 1)
@@ -194,11 +210,21 @@ def _plot_correlation_chart(price_df, related_prices, out_path):
     fig, ax = plt.subplots(figsize=(10, 4.8))
     ax.plot(history["Date"], normalized, label="SK하이닉스", linewidth=2.4, color="#1f77b4")
 
-    category_styles = {
-        "시장 전체": {"color": "#7f7f7f", "linestyle": "-."},
-        "반도체 섹터": {"color": "#ff7f0e", "linestyle": "--"},
-        "메모리 동종업계": {"color": "#2ca02c", "linestyle": ":"},
+    # 같은 계층(예: 시장 전체 3개 지수)을 같은 linestyle로 묶어 계층을 구분하고,
+    # 계층 안에서는 서로 다른 색을 배정해 개별 시리즈를 구분한다. 이전에는 계층별로
+    # 색+선스타일을 통째로 고정해서 같은 계층 안의 여러 지수가 겹쳐 안 보였다.
+    category_linestyles = {
+        "시장 전체": "-.",
+        "반도체 섹터": "--",
+        "메모리 동종업계": ":",
     }
+    category_colors = {
+        "시장 전체": ["#7f7f7f", "#8c564b", "#17becf"],
+        "반도체 섹터": ["#ff7f0e"],
+        "메모리 동종업계": ["#2ca02c", "#9467bd", "#e377c2"],
+    }
+    color_cursor = {cat: 0 for cat in category_colors}
+
     for name, df in related_prices.items():
         df = df.copy()
         df["Date"] = pd.to_datetime(df["Date"])
@@ -206,8 +232,12 @@ def _plot_correlation_chart(price_df, related_prices, out_path):
         if df.empty:
             continue
         df_base = df["Close"].iloc[0]
-        style = category_styles.get(CATEGORY_OF.get(name, ""), {})
-        ax.plot(df["Date"], df["Close"] / df_base * 100, label=name, alpha=0.85, **style)
+        category = CATEGORY_OF.get(name, "")
+        palette = category_colors.get(category, ["#333333"])
+        color = palette[color_cursor.get(category, 0) % len(palette)]
+        color_cursor[category] = color_cursor.get(category, 0) + 1
+        linestyle = category_linestyles.get(category, "-")
+        ax.plot(df["Date"], df["Close"] / df_base * 100, label=name, alpha=0.9, color=color, linestyle=linestyle)
 
     ax.set_title("SK하이닉스 vs 시장지수·반도체섹터·동종업계 (최근 180일, 시작일=100 기준)")
     ax.set_xlabel("날짜")
@@ -215,6 +245,28 @@ def _plot_correlation_chart(price_df, related_prices, out_path):
     ax.legend(fontsize=8, ncol=2)
     _style_axes(ax)
     plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=120)
+    plt.close(fig)
+
+
+def _plot_correlation_bars(items, out_path, title):
+    """상관계수를 막대 길이+색으로 한눈에 보여준다 (양의 상관=빨강 계열, 음의 상관=파랑 계열).
+    표의 숫자는 정확하지만 하나하나 읽어야 하는 반면, 색과 길이는 바로 눈에 들어온다."""
+    items = sorted(items, key=lambda x: x[1])
+    labels = [x[0] for x in items]
+    values = [x[1] for x in items]
+    colors = plt.cm.RdBu_r([(v + 1) / 2 for v in values])
+
+    fig, ax = plt.subplots(figsize=(8, max(2.5, 0.32 * len(items))))
+    ax.barh(labels, values, color=colors, edgecolor="#333333", linewidth=0.5)
+    ax.axvline(0, color="#333333", linewidth=0.8)
+    ax.set_xlim(-1, 1)
+    ax.set_xlabel("상관계수 (일별 수익률 기준, 음수=반대로 움직임 · 양수=같이 움직임)")
+    ax.set_title(title)
+    ax.grid(True, axis="x", alpha=0.3, linestyle="--")
+    ax.xaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:+.1f}"))
+    ax.tick_params(axis="y", labelsize=8)
     plt.tight_layout()
     plt.savefig(out_path, dpi=120)
     plt.close(fig)
@@ -319,6 +371,26 @@ def generate_report(
     correlation_chart_path = os.path.join(ASSETS_DIR, "correlation.png")
     _plot_correlation_chart(price_df, related_prices, correlation_chart_path)
 
+    from related_stocks import CATEGORY_OF
+
+    correlation_bar_path = os.path.join(ASSETS_DIR, "correlation_bars.png")
+    _plot_correlation_bars(
+        [(f"{name} ({CATEGORY_OF.get(name, '기타')})", corr) for name, corr in correlations.items()],
+        correlation_bar_path,
+        "SK하이닉스와의 상관관계 (시장·섹터·동종업계)",
+    )
+
+    index_scan_bar_path = os.path.join(ASSETS_DIR, "index_scan_bars.png")
+    index_scan_items = [
+        (f"{item['name']} ({index_name.split(' ')[0]})", item["correlation"])
+        for index_name, items in index_scan_result.items()
+        for item in items
+    ]
+    if index_scan_items:
+        _plot_correlation_bars(
+            index_scan_items, index_scan_bar_path, "코스피200 · 나스닥100 · S&P500 대표종목 상관관계"
+        )
+
     avg_sentiment = forecast["sentiment_score"]
     mood = "긍정적" if avg_sentiment > 0.2 else "부정적" if avg_sentiment < -0.2 else "중립적"
     outlook = _outlook_text(forecast, last_close, avg_sentiment, rolling_result)
@@ -416,6 +488,7 @@ def generate_report(
 <h2>시장 · 섹터 · 동종업계 비교</h2>
 <p>SK하이닉스의 움직임이 시장 전체/반도체 섹터/메모리 동종업계 중 어디에 더 가까운지 참고할 수 있는 최근 180일 추세 비교 및 일별 수익률 상관계수입니다.</p>
 <img src="assets/correlation.png" alt="시장·섹터·동종업계 비교 차트">
+<img src="assets/correlation_bars.png" alt="시장·섹터·동종업계 상관계수 막대그래프">
 <table>
 <tr><th>분류</th><th>종목/지수</th><th>상관계수</th><th>강도</th></tr>
 {_correlation_rows_html(correlations)}
@@ -425,6 +498,7 @@ def generate_report(
 <p>각 지수 전체를 매번 스캔하기보다(수백 종목, 실행 시간·API 호출 부담), 지수를 대표하는 표본 종목들과의
 상관관계를 계산해 SK하이닉스와 가장 동조하는 종목을 지수별로 보여줍니다. 전체 지수 구성종목 중 상관관계
 1위라는 뜻이 아니라, 아래 표본 안에서의 순위입니다.</p>
+<img src="assets/index_scan_bars.png" alt="지수별 대표종목 상관계수 막대그래프">
 <table>
 <tr><th>지수</th><th>종목</th><th>상관계수</th><th>강도</th></tr>
 {_index_scan_rows_html(index_scan_result)}
