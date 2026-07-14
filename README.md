@@ -2,6 +2,8 @@
 
 SK하이닉스(000660.KS) 주가를 사전학습된 시계열 예측 모델(Amazon Chronos)과 뉴스 감성분석으로 예측해보는 PoC입니다. 매일 실행하면 최신 데이터로 정적 대시보드(`docs/index.html`)를 다시 생성하고, GitHub Pages로 바로 배포됩니다.
 
+**🔗 바로 보기: https://jihoonlee91.github.io/jihoonlee91-hynix-stock-prediction/**
+
 > ⚠️ 교육/PoC 목적의 프로젝트이며 투자 판단에 사용하면 안 됩니다.
 
 ## 구성

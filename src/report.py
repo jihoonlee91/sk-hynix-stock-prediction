@@ -68,7 +68,53 @@ def _forecast_rows_html(forecast_dates, forecast):
     return "\n".join(rows)
 
 
-def generate_report(price_df, news, sentiment_scores, forecast):
+def _backtest_rows_html(backtest_result):
+    rows = []
+    for actual, predicted in zip(backtest_result["actual"], backtest_result["predicted"]):
+        error_pct = (predicted - actual) / actual * 100
+        rows.append(
+            f"<tr><td>{actual:,.0f}</td><td>{predicted:,.0f}</td><td>{error_pct:+.2f}%</td></tr>"
+        )
+    return "\n".join(rows)
+
+
+def _plot_rolling_chart(rolling_result, out_path):
+    # windows[0]이 가장 최근 구간이므로, 그래프는 과거->현재 순으로 보이도록 뒤집는다.
+    windows = list(reversed(rolling_result["windows"]))
+    mapes = [w["mape"] for w in windows]
+    labels = [f"-{len(windows) - i}" for i in range(len(windows))]
+
+    plt.figure(figsize=(10, 3.5))
+    plt.bar(labels, mapes, color="#2ca02c")
+    plt.axhline(rolling_result["mape_mean"], color="#d62728", linestyle="--", label="평균 MAPE")
+    plt.title("롤링 백테스트: 과거 예측 구간별 오차율(MAPE)")
+    plt.xlabel("예측 구간 (과거 → 최근)")
+    plt.ylabel("MAPE (%)")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=120)
+    plt.close()
+
+
+def _outlook_text(forecast, last_close, avg_sentiment):
+    horizon = len(forecast["median"])
+    final_median = forecast["median"][-1]
+    change_pct = (final_median - last_close) / last_close * 100
+    direction = "상승" if change_pct > 0.5 else "하락" if change_pct < -0.5 else "보합"
+    mood = "긍정적" if avg_sentiment > 0.2 else "부정적" if avg_sentiment < -0.2 else "중립적"
+
+    band_low = forecast["low"][-1]
+    band_high = forecast["high"][-1]
+
+    return (
+        f"Chronos 모델은 향후 {horizon}거래일 뒤 종가를 현재({last_close:,.0f}원) 대비 "
+        f"<b>{change_pct:+.2f}% ({direction})</b>한 <b>{final_median:,.0f}원</b> 안팎으로 전망합니다 "
+        f"(10~90% 구간: {band_low:,.0f}원 ~ {band_high:,.0f}원). "
+        f"같은 기간 수집된 뉴스 논조는 <b>{mood}</b>({avg_sentiment:+.2f})으로, 예측치에 소폭 반영되었습니다."
+    )
+
+
+def generate_report(price_df, news, sentiment_scores, forecast, backtest_result, rolling_result):
     os.makedirs(ASSETS_DIR, exist_ok=True)
 
     last_date = price_df["Date"].iloc[-1]
@@ -78,8 +124,12 @@ def generate_report(price_df, news, sentiment_scores, forecast):
     chart_path = os.path.join(ASSETS_DIR, "chart.png")
     _plot_chart(price_df, forecast, forecast_dates, chart_path)
 
+    rolling_chart_path = os.path.join(ASSETS_DIR, "rolling_backtest.png")
+    _plot_rolling_chart(rolling_result, rolling_chart_path)
+
     avg_sentiment = forecast["sentiment_score"]
     mood = "긍정적" if avg_sentiment > 0.2 else "부정적" if avg_sentiment < -0.2 else "중립적"
+    outlook = _outlook_text(forecast, last_close, avg_sentiment)
 
     html = f"""<!DOCTYPE html>
 <html lang="ko">
@@ -105,6 +155,18 @@ def generate_report(price_df, news, sentiment_scores, forecast):
   ⚠️ 이 페이지는 사전학습 모델(Amazon Chronos, koelectra) 활용 가능성을 검증하는 <b>PoC(Proof of Concept)</b>이며, 실제 투자 판단에 사용해서는 안 됩니다.
 </div>
 
+<h2>향후 전망 요약</h2>
+<p>{outlook}</p>
+
+<h2>예측 기법 설명</h2>
+<ol>
+  <li><b>가격 데이터 수집</b> — Yahoo Finance에서 SK하이닉스(000660.KS) 최근 약 2년치 일별 종가를 가져옵니다.</li>
+  <li><b>뉴스 감성분석</b> — Google News RSS로 "SK하이닉스", "반도체 지정학" 관련 최신 기사 제목을 모아, 사전학습된 한국어 감성분류 모델로 각 제목을 긍정/부정 점수(-1~1)로 변환하고 평균을 냅니다.</li>
+  <li><b>가격 예측</b> — 최근 90거래일 종가만을 입력으로, 별도 학습 과정 없이 <b>Amazon Chronos</b>(사전학습된 시계열 파운데이션 모델)가 향후 {len(forecast['median'])}거래일의 가격 분포를 zero-shot으로 예측합니다.</li>
+  <li><b>감성 보정</b> — Chronos는 가격 외 정보를 직접 입력받지 않으므로, 뉴스 평균 감성 점수를 예측 중앙값에 곱셈 형태의 단순 보정(최대 ±1%)으로만 반영합니다. 학습된 결합 모델이 아니라 휴리스틱임을 명시합니다.</li>
+  <li><b>성능 검증</b> — 아래 "성능 분석"에서 설명하듯, <b>미래 시점의 실제 값은 예측 시점에 전혀 사용하지 않고</b>(look-ahead 없이) 과거 여러 시점을 기준으로 같은 방식을 반복 적용해 정확도를 측정합니다.</li>
+</ol>
+
 <h2>예측 차트</h2>
 <img src="assets/chart.png" alt="주가 예측 차트">
 
@@ -120,6 +182,20 @@ def generate_report(price_df, news, sentiment_scores, forecast):
 <tr><th>검색어</th><th>제목</th><th>감성</th></tr>
 {_news_rows_html(news, sentiment_scores)}
 </table>
+
+<h2>성능 분석</h2>
+<h3>최근 구간 백테스트</h3>
+<p>가장 최근 {len(backtest_result['actual'])}거래일을 정답으로 숨기고, <b>그 이전 데이터까지의 정보만으로</b> 같은 방식으로 예측해본 결과입니다.</p>
+<p>MAE(평균 절대 오차): <b>{backtest_result['mae']:,.0f}원</b> · MAPE(평균 절대 백분율 오차): <b>{backtest_result['mape']:.2f}%</b></p>
+<table>
+<tr><th>실제 종가</th><th>예측 종가</th><th>오차</th></tr>
+{_backtest_rows_html(backtest_result)}
+</table>
+
+<h3>롤링 백테스트 (여러 과거 시점 반복 검증)</h3>
+<p>단일 구간만으로는 우연히 잘/못 맞을 수 있어, 과거 {rolling_result['num_windows']}개 시점 각각에서 "그 시점까지의 데이터만" 사용해 반복적으로 예측/채점한 결과입니다 (walk-forward, look-ahead 없음).</p>
+<p>평균 MAPE: <b>{rolling_result['mape_mean']:.2f}%</b> (표준편차 {rolling_result['mape_std']:.2f}%p) · 평균 MAE: <b>{rolling_result['mae_mean']:,.0f}원</b></p>
+<img src="assets/rolling_backtest.png" alt="롤링 백테스트 오차율 차트">
 
 <h2>구성 요소</h2>
 <ul>
