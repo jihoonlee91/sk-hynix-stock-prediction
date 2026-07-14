@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>SK하이닉스 주가 예측 PoC</title>
+<style>
+  body { font-family: -apple-system, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 16px; color: #222; }
+  h1 { font-size: 1.6rem; }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; }
+  th, td { border: 1px solid #ddd; padding: 6px 10px; text-align: left; font-size: 0.9rem; }
+  th { background: #f5f5f5; }
+  img { max-width: 100%; }
+  .disclaimer { background: #fff3cd; border: 1px solid #ffeaa7; padding: 12px; border-radius: 6px; font-size: 0.85rem; }
+  .meta { color: #666; font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<h1>SK하이닉스(000660.KS) 주가 예측 PoC</h1>
+<p class="meta">기준일: 2026-07-14 (종가 1,733,000원) · 생성 시각: 2026-07-14 12:54</p>
+
+<div class="disclaimer">
+  ⚠️ 이 페이지는 사전학습 모델(Amazon Chronos, koelectra) 활용 가능성을 검증하는 <b>PoC(Proof of Concept)</b>이며, 실제 투자 판단에 사용해서는 안 됩니다.
+</div>
+
+<h2>예측 차트</h2>
+<img src="assets/chart.png" alt="주가 예측 차트">
+
+<h2>향후 5거래일 예측</h2>
+<table>
+<tr><th>날짜</th><th>하한(10%)</th><th>중앙값</th><th>상한(90%)</th></tr>
+<tr><td>2026-07-15</td><td>1,550,628</td><td>1,710,163</td><td>1,897,495</td></tr>
+<tr><td>2026-07-16</td><td>1,377,799</td><td>1,710,163</td><td>1,983,305</td></tr>
+<tr><td>2026-07-17</td><td>1,437,020</td><td>1,661,819</td><td>1,988,140</td></tr>
+<tr><td>2026-07-20</td><td>1,381,425</td><td>1,631,605</td><td>2,009,894</td></tr>
+<tr><td>2026-07-21</td><td>1,248,479</td><td>1,625,561</td><td>2,019,563</td></tr>
+</table>
+
+<h2>뉴스 감성 분석</h2>
+<p>최근 수집 뉴스 30건의 평균 감성 점수: <b>-0.43</b> (부정적) — 예측 중앙값에 -0.43% 보정 반영됨 (감성 점수 기반 단순 휴리스틱)</p>
+<table>
+<tr><th>검색어</th><th>제목</th><th>감성</th></tr>
+<tr><td>SK하이닉스</td><td>SK하이닉스 美 ADR 9.3% 급락...공모가와 3.35달러 차이로 내려와 - 조선일보</td><td>부정 (-0.74)</td></tr>
+<tr><td>SK하이닉스</td><td>"AI 파티 끝났나"…월가가 본 SK하이닉스 13% 급락 이유 - 연합인포맥스</td><td>부정 (-0.86)</td></tr>
+<tr><td>SK하이닉스</td><td>SK하이닉스 주가, 오늘 급락한 이유는? - Investing.com 한국어</td><td>부정 (-0.80)</td></tr>
+<tr><td>SK하이닉스</td><td>"SK하이닉스 185만원 간다"…BNK증권 5일 전 보고서 재조명 - 연합뉴스TV</td><td>부정 (-0.77)</td></tr>
+<tr><td>SK하이닉스</td><td>‘SK하이닉스=185만원’? 이유 물어보니…“하이퍼스케일러 현금 말랐다” - 국민일보</td><td>부정 (-0.83)</td></tr>
+<tr><td>SK하이닉스</td><td>4일 전 “하이닉스 185만원 간다” 맞힌 보고서…“실적 기대 이하” 연이어 나왔다 [내가샀다] - 서울신문</td><td>부정 (-0.97)</td></tr>
+<tr><td>SK하이닉스</td><td>[단독] SK하이닉스, 호남팹 합작 투자 가능 … 수십조 재무부담 던다 - 한국경제</td><td>부정 (-0.93)</td></tr>
+<tr><td>SK하이닉스</td><td>SK하이닉스 등 반도체주 하락…금리 우려까지 겹쳐 - KBS 뉴스</td><td>부정 (-0.58)</td></tr>
+<tr><td>SK하이닉스</td><td>삼성전자·SK하이닉스 주춤한 사이 중국 반도체는 ‘재평가’...ETF도 질주 - 조선일보</td><td>부정 (-0.62)</td></tr>
+<tr><td>SK하이닉스</td><td>법원 "삼성 핵심 반도체 인력, SK하이닉스 이직 1년 반 금지" - MBC 뉴스</td><td>부정 (-0.81)</td></tr>
+<tr><td>SK하이닉스</td><td>SK하이닉스, 청주 한부모가족에 온누리상품권 5천만원 기탁 - 연합뉴스</td><td>부정 (-0.90)</td></tr>
+<tr><td>SK하이닉스</td><td>SK하이닉스, 용인 'Y1' 팹 구축 본격화…장비 발주 시작 - 지디넷코리아</td><td>부정 (-0.63)</td></tr>
+<tr><td>SK하이닉스</td><td>코스피 혼조세...SK하이닉스 4%대 하락했다 상승 전환 - 조선일보</td><td>부정 (-0.97)</td></tr>
+<tr><td>SK하이닉스</td><td>SK하이닉스 실적전망 또 하향..."이미 주가 급락, 저점 매수 기회" - 머니투데이 - 머니투데이</td><td>부정 (-0.98)</td></tr>
+<tr><td>SK하이닉스</td><td>SK하이닉스 미 ADR 9.3% 급락…공모가 소폭 웃돌아 - 연합뉴스TV</td><td>부정 (-0.67)</td></tr>
+<tr><td>반도체 지정학</td><td>[코스피·코스닥지수] 중동 긴장 고조에 국제유가 급등…코스피, 지정학 리스크와 반도체 호재 '줄다리기’ - 한국강사신문</td><td>긍정 (+0.60)</td></tr>
+<tr><td>반도체 지정학</td><td>[경제밥도둑]롯데·LG 지고, 한화·LS·반도체 뜨고···AI와 지정학 갈등이 만든 ‘재계 지각변동’ - 경향신문</td><td>부정 (-0.96)</td></tr>
+<tr><td>반도체 지정학</td><td>“올해 우리나라 성장의 세 가지 키워드…반도체·지정학 그리고 양극화” - 마켓인</td><td>긍정 (+0.98)</td></tr>
+<tr><td>반도체 지정학</td><td>"지정학 리스크에 韓 반도체 40년 만의 슈퍼 사이클…해양·방산·조선업도 관심" - 뉴시스</td><td>부정 (-0.83)</td></tr>
+<tr><td>반도체 지정학</td><td>[지금 주목할 종목] "지정학 리스크 뚫는 실적 체력… 반도체 소부장 · EUV 주도주 선점은 이 종목" - 머니투데이 - 머니투데이</td><td>긍정 (+0.68)</td></tr>
+<tr><td>반도체 지정학</td><td>韓 여야의원들 대만 방문…“지정학 도전·반도체 등 논의” - v.daum.net</td><td>긍정 (+0.53)</td></tr>
+<tr><td>반도체 지정학</td><td>전쟁이 만든 지정학 프리미엄··· ‘에너지·방산·반도체’ 위기 속 더 강해진다 - 그린포스트코리아</td><td>긍정 (+0.65)</td></tr>
+<tr><td>반도체 지정학</td><td>韓 여야의원들 대만 방문…“지정학 도전·반도체 등 논의” - dt.co.kr</td><td>긍정 (+0.54)</td></tr>
+<tr><td>반도체 지정학</td><td>“AI냐 전쟁이냐” 반도체 ETF, 낙관론과 지정학 리스크의 격전지로 부상 - Benzinga</td><td>긍정 (+0.60)</td></tr>
+<tr><td>반도체 지정학</td><td>[AI칩 지정학] ① 파운드리 이전 '분업 도시'···신주가 세계 반도체를 찍어내는 방식 - 여성경제신문</td><td>부정 (-0.97)</td></tr>
+<tr><td>반도체 지정학</td><td>'빛의 전쟁'에서 한국은 살아남을 것인가... 미 마이크로소프트발 광반도체 재편의 실체 - 초이스스탁</td><td>긍정 (+0.71)</td></tr>
+<tr><td>반도체 지정학</td><td>[AI MY 증시전망] 지정학 리스크 속 반도체·성장주 주목 - 뉴스핌</td><td>부정 (-0.88)</td></tr>
+<tr><td>반도체 지정학</td><td>한국 여야 의원단 대만 방문…지정학·반도체·AI 협력 논의 - 아주경제</td><td>부정 (-0.85)</td></tr>
+<tr><td>반도체 지정학</td><td>[실리콘 디코드] 中 자본 vs 歐 경영진 '반도체 내전'…넥스페리아, 웨이퍼 끊고 전면전 - 글로벌이코노믹</td><td>부정 (-0.98)</td></tr>
+<tr><td>반도체 지정학</td><td>한국 여야 의원단 대만 방문…지정학·반도체·AI 협력 논의 - v.daum.net</td><td>부정 (-0.69)</td></tr>
+</table>
+
+<h2>구성 요소</h2>
+<ul>
+  <li>주가 데이터: Yahoo Finance (yfinance)</li>
+  <li>뉴스: Google News RSS ("SK하이닉스", "반도체 지정학" 검색)</li>
+  <li>감성분석: <code>monologg/koelectra-small-finetuned-nsmc</code> (사전학습, 공개 모델)</li>
+  <li>가격 예측: <code>amazon/chronos-t5-small</code> (Amazon Chronos, 사전학습 시계열 파운데이션 모델, zero-shot)</li>
+</ul>
+
+</body>
+</html>
